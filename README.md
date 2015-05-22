@@ -2,6 +2,9 @@
 
 This tool have two modes.
 
-.) ajp ping
+* ajp ping
+* ajp check
 
-.) ajp check
+Link for git hub editing
+
+https://help.github.com/categories/writing-on-github/
