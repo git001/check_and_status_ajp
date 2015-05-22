@@ -5,6 +5,11 @@ This tool have two modes.
 * ajp ping
 * ajp check
 
+## Used perl modules
+* Socket
+* Time::HiRes
+* POSIX
+
 ## Description
 
 The default mode is the **ping** mode
