@@ -5,11 +5,19 @@ This tool have two modes.
 * ajp ping
 * ajp check
 
+## Description
+
 The default mode is the *ping* mode
 
-The check mode can be used when the program is called as *check_ajp.pl* as you can see on this line.
+The check mode can be used when the program is called as *check_ajp.pl*.
 
-* check_ajp.pl: git001/check_and_status_ajp/ajpping.pl#L22
+This can be done with symlinks or with a copy of *ajpping.pl*
+
+## Ping mode
+
+You *must* call ajpping.pl with at least two parameters.
+* hostname or ip
+* port
 
 
 Link for git hub editing
