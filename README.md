@@ -47,7 +47,7 @@ A Setup of the output line is at the end of the file in the END Block
 
 ## Check mode
 
-The output of the check mode looks similar. The only change is that the line prefix is not the date and time.
+The output of the check mode looks similar. The only difference is that the line prefix is not the date and time.
 
 ```
 OK - AJP | host %s ip %s port %s connect %f syswrite %f sysread %f timeouted %d timeout %d good_answer %d
