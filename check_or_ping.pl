@@ -8,7 +8,8 @@
 
 use warnings;
 use strict;
-use Socket;
+#use Socket qw( PF_INET SOCK_STREAM getaddrinfo getnameinfo AI_CANONNAME EAI_NONAME IPPROTO_TCP AF_INET AF_INET6 sockaddr_in inet_ntop);
+use Socket qw (:all);
 use Time::HiRes qw( time ualarm gettimeofday tv_interval );
 use POSIX qw (strftime);
 use Getopt::Long;
@@ -45,8 +46,12 @@ our $d_timeout = 100000; # 100 milli seconds
 our $timeouted   = undef;
 our $good_answer = undef ;
 our $ip = undef ;
-our $sock ;
 our $error_connect = undef;
+
+# hints for getaddrinfo
+our $hints = {};
+$hints->{'socktype'} = SOCK_STREAM;
+$hints->{'flags'}    = AI_CANONNAME;
 
 our $connect_start  = -0.01;
 our $connect_done   = -0.01;
@@ -104,52 +109,41 @@ if ($o_port =~ /\D/) {
     die "Bad port: $o_port" unless $o_port;
 }
 
-our $iaddr = inet_aton($o_host) or die "No such host: $o_host";
-our $paddr = sockaddr_in($o_port, $iaddr) or die $!;
+our ($err, @res) = getaddrinfo($o_host,$o_port,$hints);
 
-# Grab the number for TCP out of /etc/protocols.
-our $proto = getprotobyname 'tcp' ;
+if ( $err == EAI_NONAME ){
+  print "$o_host could not be resolved: $err\n";
+  exit $ERRORS{'CRITICAL'};
+}elsif( $err ) {
+  print "getaddrinfo error: $err\n";
+  exit $ERRORS{'CRITICAL'};
+}
 
-# PF_INET and SOCK_STREAM are constants imported by the Socket module.  They
-# are the same as what is defined in sys/socket.h.
-socket $sock, PF_INET, SOCK_STREAM, $proto or die "Can't create socket: $!";
+#use Data::Dumper;
+#print Dumper(@res);
+# $VAR1 = {
+#          'protocol' => 6,
+#          'canonname' => 'external.none.at',
+#          'addr' => 'I	is',
+#          'socktype' => 1,
+#          'family' => 2
+#        };
 
-# Get a printable IP address from the in_addr_t type returned by inet_aton().
-$ip = join('.', unpack('C4', $iaddr));
+our ( $errr, $port );
+
+foreach our $entry (@res){
+  print_info($entry);
+  do_the_work($o_timeout,$entry);
+  ( $errr, $ip, $port ) = getnameinfo($entry->{'addr'});
+  print "( $errr, $ip, $port )\n";
+}
+exit;
 
 # Now that the port value is a number, and the host (if it was originally a
 # name) has been resolved to an IP address, then print a status header like
 # the real ping does.
 print "$0 $o_host ($ip) port $o_port\n" if defined $o_verbose;
 
-ualarm(0); 
-ualarm($o_timeout);
-
-$connect_start = [gettimeofday];
-if ( ! connect $sock, $paddr ) {
-  $error_connect = 1;
-  die "$o_host $ip $o_port $!";
-}
-
-$connect_done = tv_interval ( $connect_start,[gettimeofday]);
-
-ualarm(0); 
-ualarm($o_timeout);
-
-$syswrite_start = [gettimeofday];
-syswrite $sock, $data_send or die "$o_host $ip $o_port $!";
-$syswrite_done = tv_interval ( $syswrite_start, [gettimeofday]);
-
-ualarm(0); 
-ualarm($o_timeout);
-
-$sysread_start = [gettimeofday];
-sysread $sock, $data_recv, $data_length or die "$o_host $ip $o_port $!";
-$sysread_done = tv_interval ( $sysread_start , [gettimeofday]);
-
-ualarm(0); 
-
-close $sock or warn " can't close socket: $!";
 
 if ( defined $o_verbose ){
   printf ("connect  Time: %f\n",$connect_done);
@@ -384,3 +378,66 @@ sub build_random_packets{
 
   return ($rand_length,$rand_ping,undef);
 } # end build_random_packets
+
+sub do_the_work{
+
+  our ( $timeout , $entry ) = @_;
+
+  our $sock ;
+
+  # PF_INET and SOCK_STREAM are constants imported by the Socket module.  They
+  # are the same as what is defined in sys/socket.h.
+  socket $sock, PF_INET, SOCK_STREAM, IPPROTO_TCP or die "Can't create socket: $!";
+
+  ualarm(0); 
+  ualarm($timeout);
+
+  $connect_start = [gettimeofday];
+  if ( ! connect $sock, $entry->{'addr'} ) {
+    $error_connect = 1;
+    die "$o_host $ip $o_port $!";
+  }
+
+  $connect_done = tv_interval ( $connect_start,[gettimeofday]);
+
+  ualarm(0); 
+  ualarm($timeout);
+
+  $syswrite_start = [gettimeofday];
+  syswrite $sock, $data_send or die "$o_host $ip $o_port $!";
+  $syswrite_done = tv_interval ( $syswrite_start, [gettimeofday]);
+
+  ualarm(0); 
+  ualarm($timeout);
+
+  $sysread_start = [gettimeofday];
+  sysread $sock, $data_recv, $data_length or die "$o_host $ip $o_port $!";
+  $sysread_done = tv_interval ( $sysread_start , [gettimeofday]);
+
+  ualarm(0); 
+
+  close $sock or warn " can't close socket: $!";
+
+} # end do_the_work
+
+sub print_info {
+
+  our ($entry) = @_;
+
+  if ($entry->{'family'} == AF_INET) {
+ 
+    # port is always 0 when resolving a hostname
+    my ($err, $addr4, $port) = getnameinfo($entry->{'addr'});
+    print "($err, $addr4, $port)\n";
+ 
+    print "IPv4:\n";
+    print " $addr4, ";
+    print "port: $port, ";
+    print "protocol: $entry->{'protocol'}, socktype: $entry->{'socktype'}, canonname: $entry->{'canonname'}\n";
+  } else {
+ 
+    my ($port, $addr6, $scope_id, $flowinfo) = sockaddr_in6($_->{addr});
+    print "IPv6:\n";
+    print "  " . inet_ntop(AF_INET6, $addr6) . ", port: $port, protocol: $entry->{'protocol'}, socktype: $entry->{'socktype'}, (scope id: $scope_id, flowinfo: $flowinfo), canonname: $entry->{'canonname'}\n";
+  }
+}# end print_info
