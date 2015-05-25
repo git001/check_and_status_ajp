@@ -46,6 +46,7 @@ our $timeouted   = undef;
 our $good_answer = undef ;
 our $ip = undef ;
 our $sock ;
+our $error_connect = undef;
 
 our $connect_start  = -0.01;
 our $connect_done   = -0.01;
@@ -125,7 +126,11 @@ ualarm(0);
 ualarm($o_timeout);
 
 $connect_start = [gettimeofday];
-connect $sock, $paddr or die "$o_host $ip $o_port $!";
+if ( ! connect $sock, $paddr ) {
+  $error_connect = 1;
+  die "$o_host $ip $o_port $!";
+}
+
 $connect_done = tv_interval ( $connect_start,[gettimeofday]);
 
 ualarm(0); 
@@ -176,6 +181,7 @@ if ( ($o_mode == $MODES{'AJPCheck'}) or ($o_mode == $MODES{'AJPPing'})){
 END {
 
   exit $ERRORS{'UNKNOWN'} if ! defined $ip;
+  exit $ERRORS{'CRITICAL'} if defined $error_connect;
   
   if ( ($o_mode == $MODES{'AJPCheck'}) or ($o_mode == $MODES{'GCheck'}) or ($o_mode == $MODES{'HTTPCheck'}) ) {
     if ( defined $timeouted ){
